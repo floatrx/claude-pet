@@ -83,7 +83,8 @@ pub fn run() {
                 .build()?;
 
             TrayIconBuilder::with_id("claude-pet-tray")
-                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))?)
+                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?)
+                .icon_as_template(true)
                 .menu(&menu)
                 .tooltip("Claude Pet")
                 .on_menu_event(move |app, event| {
