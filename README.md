@@ -36,75 +36,49 @@ pnpm install
 
 ## Claude Code Hooks Setup
 
-The hook at `hooks/pet-state-writer.mjs` writes session state to `~/.claude/pet-state.json` on every Claude Code lifecycle event.
+The hook script writes session state to `~/.claude/pet-state.json` on every Claude Code lifecycle event. The repo contains a template at `hooks/pet-state-writer.mjs` — copy it to `~/.claude/hooks/` for a portable setup.
 
-### Register the hook
+### Install the hook
 
-Add to your Claude Code settings (`~/.claude/settings.json`):
+```bash
+# Copy hook to ~/.claude/hooks/
+cp hooks/pet-state-writer.mjs ~/.claude/hooks/pet-state-writer.mjs
+```
+
+### Register in Claude Code settings
+
+Add to `~/.claude/settings.json` (merge into existing `hooks` if you have other hooks):
 
 ```json
 {
   "hooks": {
     "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/claude-pet/hooks/pet-state-writer.mjs"
-          }
-        ]
-      }
+      { "matcher": "startup", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
     ],
     "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/claude-pet/hooks/pet-state-writer.mjs"
-          }
-        ]
-      }
+      { "matcher": ".*", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
     ],
     "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/claude-pet/hooks/pet-state-writer.mjs"
-          }
-        ]
-      }
+      { "matcher": ".*", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
     ],
     "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/claude-pet/hooks/pet-state-writer.mjs"
-          }
-        ]
-      }
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
     ],
     "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/claude-pet/hooks/pet-state-writer.mjs"
-          }
-        ]
-      }
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
+    ],
+    "Notification": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
+    ],
+    "SubagentStart": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
+    ],
+    "SubagentStop": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/pet-state-writer.mjs\"", "timeout": 5 }] }
     ]
   }
 }
 ```
-
-> Replace `/absolute/path/to/claude-pet` with your actual project path.
 
 ### Hook events
 
