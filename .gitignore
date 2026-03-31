@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.work/
+CLAUDE.md
+.claude/
+.openapi.json
