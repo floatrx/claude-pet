@@ -9,26 +9,36 @@ const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const appWindow = getCurrentWindow();
 
-// -- Canvas setup --
-const TOOLTIP_SPACE = 72; // space above pet for tooltip
-const TOTAL_HEIGHT = RENDER_SIZE + TOOLTIP_SPACE;
+// -- Layout --
+const SPRITE_BOTTOM_PAD = -10; // fine-tune: push pets higher above dock
+let dockHeight = 70; // updated from Rust
+
+// Default pet Y: walk just above the dock
+function defaultPetY() {
+  return window.innerHeight - RENDER_SIZE - dockHeight + SPRITE_BOTTOM_PAD;
+}
 
 function resize() {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = window.innerWidth * dpr;
-  canvas.height = TOTAL_HEIGHT * dpr;
-  canvas.style.height = `${TOTAL_HEIGHT}px`;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 resize();
 window.addEventListener('resize', resize);
 
+// Receive dock dimensions from Rust
+listen<{ height: number }>('dock-info', (event) => {
+  dockHeight = event.payload.height;
+});
+
 // -- Sprite & pet management --
 const sprites = generateSpriteSheet();
 const pets = new Map<string, Pet>();
 
-// Always have at least one idle pet when no sessions
 function ensureDefaultPet() {
   if (pets.size === 0) {
     const defaultSession: Session = {
@@ -44,7 +54,6 @@ ensureDefaultPet();
 
 // -- Session sync --
 onSessionsChange((sessions) => {
-  // Remove pets for sessions that no longer exist
   const activeIds = new Set(sessions.map((s) => s.id));
   for (const [id] of pets) {
     if (id === 'default') continue;
@@ -53,13 +62,11 @@ onSessionsChange((sessions) => {
     }
   }
 
-  // Add or update pets for active sessions
   for (const session of sessions) {
     const existing = pets.get(session.id);
     if (existing) {
       existing.updateSession(session);
     } else {
-      // Remove default pet when real sessions appear
       if (pets.has('default') && session.id !== 'default') {
         pets.delete('default');
       }
@@ -69,7 +76,6 @@ onSessionsChange((sessions) => {
     }
   }
 
-  // Re-add default if all sessions gone
   if (sessions.length === 0) {
     ensureDefaultPet();
   }
@@ -84,9 +90,9 @@ let cursorX = -1;
 let cursorY = -1;
 let hoveredPet: Pet | null = null;
 
-// Track drag state
 let draggedPet: Pet | null = null;
 let dragOffsetX = 0;
+let dragOffsetY = 0;
 let clickThroughEnabled = true;
 
 async function trackCursor() {
@@ -95,20 +101,20 @@ async function trackCursor() {
     const winPos = await appWindow.outerPosition();
     const scale = window.devicePixelRatio || 1;
 
-    // Convert screen coords to canvas-local coords
     cursorX = (pos.x - winPos.x) / scale;
     cursorY = (pos.y - winPos.y) / scale;
 
-    // Check hover
     hoveredPet = null;
     for (const pet of pets.values()) {
-      if (pet.hitTest(cursorX, cursorY, TOOLTIP_SPACE)) {
+      if (pet.hitTest(cursorX, cursorY)) {
         hoveredPet = pet;
         break;
       }
     }
 
-    // Enable/disable click-through based on hover
+    // Update cursor style
+    canvas.style.cursor = draggedPet ? 'grabbing' : hoveredPet ? 'grab' : 'default';
+
     const shouldBeClickThrough = !hoveredPet && !draggedPet;
     if (shouldBeClickThrough !== clickThroughEnabled) {
       clickThroughEnabled = shouldBeClickThrough;
@@ -119,19 +125,19 @@ async function trackCursor() {
   }
 }
 
-// Track cursor in sync with render loop (pauses when hidden)
-
-// -- Drag and drop --
+// -- Drag and drop (now supports Y axis too) --
 canvas.addEventListener('mousedown', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
 
   for (const pet of pets.values()) {
-    if (pet.hitTest(mx, my, TOOLTIP_SPACE)) {
+    if (pet.hitTest(mx, my)) {
       draggedPet = pet;
       pet.dragging = true;
+      pet.hasCustomY = true;
       dragOffsetX = mx - pet.x;
+      dragOffsetY = my - pet.y;
       break;
     }
   }
@@ -141,13 +147,29 @@ canvas.addEventListener('mousemove', (e) => {
   if (!draggedPet) return;
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
   draggedPet.x = Math.max(0, Math.min(mx - dragOffsetX, window.innerWidth - RENDER_SIZE));
+  draggedPet.y = Math.max(0, Math.min(my - dragOffsetY, window.innerHeight - RENDER_SIZE));
 });
 
 canvas.addEventListener('mouseup', () => {
   if (draggedPet) {
     draggedPet.dragging = false;
     draggedPet = null;
+  }
+});
+
+canvas.addEventListener('dblclick', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  for (const pet of pets.values()) {
+    if (pet.hitTest(mx, my)) {
+      pet.hasCustomY = false;
+      pet.x = Math.random() * (window.innerWidth - RENDER_SIZE);
+      break;
+    }
   }
 });
 
@@ -161,17 +183,20 @@ function loop(time: number) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const width = window.innerWidth;
+  const petDefaultY = defaultPetY();
 
-  // Update and draw all pets
   for (const pet of pets.values()) {
     pet.setCanvasWidth(width);
+    // Set default Y for new pets that haven't been dragged
+    if (!pet.hasCustomY) {
+      pet.y = petDefaultY;
+    }
     pet.update(dt);
-    pet.draw(ctx, TOOLTIP_SPACE);
+    pet.draw(ctx);
   }
 
-  // Draw tooltip for hovered pet (on top of everything)
   if (hoveredPet) {
-    hoveredPet.drawTooltip(ctx, TOOLTIP_SPACE);
+    hoveredPet.drawTooltip(ctx);
   }
 
   trackCursor();

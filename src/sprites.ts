@@ -102,6 +102,55 @@ function generateIdleFrames(): SpriteSet {
   return { frames, fps: 8 };
 }
 
+function generateThinkingFrames(): SpriteSet {
+  const frames: SpriteFrame[] = [];
+
+  for (let i = 0; i < 6; i++) {
+    const scratchPhase = i % 3; // 0, 1, 2 cycle
+
+    frames.push(createFrame((ctx) => {
+      drawBody(ctx, 0);
+      drawLegs(ctx, 0, 0);
+
+      // Left arm resting at side
+      rect(ctx, 8, 18, 2, 4, BODY_COLOR);
+
+      // Right arm scratching head — moves up/down
+      const armY = [6, 5, 7][scratchPhase];
+      rect(ctx, 22, 10, 2, armY, BODY_COLOR); // upper arm
+      rect(ctx, 21, 9, 3, 2, BODY_COLOR); // hand on head
+      // Scratch lines
+      if (scratchPhase === 1) {
+        px(ctx, 20, 8, '#FFFFFF');
+        px(ctx, 24, 7, '#FFFFFF');
+      }
+
+      // Eyes looking up (thinking)
+      const blink = i === 4;
+      if (blink) {
+        rect(ctx, 13, 11, 2, 1, EYE_COLOR);
+        rect(ctx, 17, 11, 2, 1, EYE_COLOR);
+      } else {
+        rect(ctx, 13, 10, 2, 2, EYE_COLOR);
+        rect(ctx, 17, 10, 2, 2, EYE_COLOR);
+        // Pupils shifted up
+        px(ctx, 13, 10, '#FFFFFF');
+        px(ctx, 17, 10, '#FFFFFF');
+      }
+
+      // Thought dots (... floating above)
+      if (i < 4) {
+        const dotOffset = i % 2;
+        px(ctx, 7, 5 - dotOffset, '#AAAAAA');
+        px(ctx, 5, 3 - dotOffset, '#999999');
+        px(ctx, 3, 1 + dotOffset, '#777777');
+      }
+    }));
+  }
+
+  return { frames, fps: 4 };
+}
+
 function generateWorkingFrames(): SpriteSet {
   const frames: SpriteFrame[] = [];
 
@@ -209,6 +258,7 @@ function generateErrorFrames(): SpriteSet {
 export function generateSpriteSheet(): SpriteSheet {
   return {
     idle: generateIdleFrames(),
+    thinking: generateThinkingFrames(),
     working: generateWorkingFrames(),
     done: generateDoneFrames(),
     error: generateErrorFrames(),

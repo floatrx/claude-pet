@@ -11,7 +11,7 @@ export interface PetState {
   sessions: Session[];
 }
 
-export type AnimationState = 'idle' | 'working' | 'done' | 'error';
+export type AnimationState = 'idle' | 'thinking' | 'working' | 'done' | 'error';
 
 export interface SpriteFrame {
   canvas: OffscreenCanvas;
@@ -24,6 +24,7 @@ export interface SpriteSet {
 
 export interface SpriteSheet {
   idle: SpriteSet;
+  thinking: SpriteSet;
   working: SpriteSet;
   done: SpriteSet;
   error: SpriteSet;

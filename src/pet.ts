@@ -1,13 +1,15 @@
 import type { AnimationState, Session, SpriteSheet } from './types';
 import { SPRITE_SIZE } from './sprites';
+import { petName } from './names';
 
-const SCALE = 4;
+const SCALE = 2;
 const RENDER_SIZE = SPRITE_SIZE * SCALE;
 const WALK_SPEED = 30; // pixels per second
 
 function statusToAnimation(status: Session['status']): AnimationState {
   switch (status) {
     case 'thinking':
+      return 'thinking';
     case 'streaming':
     case 'tool_use':
       return 'working';
@@ -31,6 +33,8 @@ function formatElapsed(since: number): string {
 
 export class Pet {
   x: number;
+  y: number;
+  hasCustomY = false;
   session: Session;
   private direction: 1 | -1 = 1;
   private animState: AnimationState = 'idle';
@@ -45,6 +49,7 @@ export class Pet {
     this.canvasWidth = canvasWidth;
     this.session = session;
     this.x = startX ?? Math.random() * (canvasWidth - RENDER_SIZE);
+    this.y = 0; // set by main loop via defaultPetY()
     this.animState = statusToAnimation(session.status);
   }
 
@@ -66,8 +71,8 @@ export class Pet {
     }
   }
 
-  hitTest(px: number, py: number, drawY: number): boolean {
-    return px >= this.x && px <= this.x + RENDER_SIZE && py >= drawY && py <= drawY + RENDER_SIZE;
+  hitTest(px: number, py: number): boolean {
+    return px >= this.x && px <= this.x + RENDER_SIZE && py >= this.y && py <= this.y + RENDER_SIZE;
   }
 
   update(dt: number) {
@@ -76,14 +81,13 @@ export class Pet {
     const spriteSet = this.sprites[this.animState];
     const frameDuration = 1 / spriteSet.fps;
 
-    // Advance animation frame
     this.frameTimer += dt;
     if (this.frameTimer >= frameDuration) {
       this.frameTimer -= frameDuration;
       this.frameIndex = (this.frameIndex + 1) % spriteSet.frames.length;
     }
 
-    // Move only when idle (walking)
+    // Move only when idle (walking horizontally)
     if (this.animState === 'idle') {
       this.x += WALK_SPEED * this.direction * dt;
 
@@ -97,7 +101,7 @@ export class Pet {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, drawY: number) {
+  draw(ctx: CanvasRenderingContext2D) {
     const spriteSet = this.sprites[this.animState];
     const frame = spriteSet.frames[this.frameIndex];
 
@@ -105,23 +109,23 @@ export class Pet {
     ctx.imageSmoothingEnabled = false;
 
     if (this.direction === -1) {
-      ctx.translate(this.x + RENDER_SIZE, drawY);
+      ctx.translate(this.x + RENDER_SIZE, this.y);
       ctx.scale(-1, 1);
       ctx.drawImage(frame.canvas, 0, 0, RENDER_SIZE, RENDER_SIZE);
     } else {
-      ctx.drawImage(frame.canvas, this.x, drawY, RENDER_SIZE, RENDER_SIZE);
+      ctx.drawImage(frame.canvas, this.x, this.y, RENDER_SIZE, RENDER_SIZE);
     }
 
     ctx.restore();
   }
 
-  drawTooltip(ctx: CanvasRenderingContext2D, drawY: number) {
+  drawTooltip(ctx: CanvasRenderingContext2D) {
     const centerX = this.x + RENDER_SIZE / 2;
     const status = this.session.status;
     const tool = this.session.tool;
     const elapsed = formatElapsed(this.session.since);
 
-    const line1 = this.session.id.slice(0, 12);
+    const line1 = petName(this.session.id);
     const line2 = tool ? `${status} (${tool})` : status;
     const line3 = elapsed;
 
@@ -139,7 +143,7 @@ export class Pet {
     const boxWidth = maxWidth + padding * 2;
     const boxHeight = lineHeight * 3 + padding * 2;
     const boxX = Math.max(0, Math.min(centerX - boxWidth / 2, this.canvasWidth - boxWidth));
-    const boxY = drawY - boxHeight - 8;
+    const boxY = this.y - boxHeight + 8;
 
     // Background
     ctx.fillStyle = 'rgba(30, 30, 30, 0.9)';

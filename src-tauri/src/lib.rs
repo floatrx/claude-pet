@@ -1,7 +1,9 @@
 mod state;
 
 use notify::{recommended_watcher, Event, EventKind, RecursiveMode, Watcher};
+use serde::Serialize;
 use state::{read_state, state_file_path};
+use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -10,27 +12,46 @@ use tauri::tray::TrayIconBuilder;
 use tauri::utils::config::Color;
 use tauri::{Emitter, Manager};
 
+#[derive(Debug, Clone, Serialize)]
+struct DockInfo {
+    height: f64,
+}
+
+/// Get dock height in logical pixels using Swift/AppKit
+fn get_dock_height() -> f64 {
+    let output = Command::new("swift")
+        .arg("-e")
+        .arg("import AppKit; print(NSScreen.main!.visibleFrame.origin.y)")
+        .output();
+
+    match output {
+        Ok(o) => String::from_utf8_lossy(&o.stdout)
+            .trim()
+            .parse::<f64>()
+            .unwrap_or(70.0),
+        Err(_) => 70.0, // fallback
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            // -- Window setup --
             let window = app.get_webview_window("main").expect("main window not found");
 
-            // Position at screen bottom
+            // Detect dock height
+            let dock_height = get_dock_height();
+
+            // Full-screen transparent window (pets default to dock area, can be dragged anywhere)
             if let Some(monitor) = window.current_monitor()? {
                 let screen = monitor.size();
-                let scale = monitor.scale_factor();
-                let win_height = 200.0 * scale;
-                let x = 0.0;
-                let y = (screen.height as f64) - win_height;
                 window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                    x: x as i32,
-                    y: y as i32,
+                    x: 0,
+                    y: 0,
                 }))?;
                 window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
                     width: screen.width,
-                    height: (win_height) as u32,
+                    height: screen.height,
                 }))?;
             }
 
@@ -39,6 +60,9 @@ pub fn run() {
 
             // Click-through by default
             window.set_ignore_cursor_events(true)?;
+
+            // Emit dock info to frontend so it knows where to draw pets
+            app.emit("dock-info", DockInfo { height: dock_height })?;
 
             // -- System Tray --
             let click_through = CheckMenuItemBuilder::new("Click-through")
@@ -116,16 +140,14 @@ pub fn run() {
                     .watch(&watch_dir, RecursiveMode::NonRecursive)
                     .expect("Failed to watch directory");
 
-                // Also emit initial state if file exists
+                // Emit initial state if file exists
                 if let Some(state) = read_state(&state_path) {
                     let _ = app_handle.emit("pet-state-changed", state);
                 }
 
                 loop {
                     if rx.recv_timeout(Duration::from_millis(100)).is_ok() {
-                        // Debounce: drain any queued events
                         while rx.try_recv().is_ok() {}
-                        // Small delay for atomic writes to complete
                         thread::sleep(Duration::from_millis(50));
 
                         if let Some(state) = read_state(&state_path) {
