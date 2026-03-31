@@ -143,23 +143,6 @@ export class Pet {
     }
 
     ctx.restore();
-
-    // Project name label above pet
-    if (this.session.project) {
-      this.drawLabel(ctx, this.session.project);
-    }
-  }
-
-  private drawLabel(ctx: CanvasRenderingContext2D, text: string) {
-    const size = this.renderSize;
-    const centerX = this.x + size / 2;
-
-    ctx.save();
-    ctx.font = '9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.fillText(text, centerX, this.y - 4);
-    ctx.restore();
   }
 
   drawTooltip(ctx: CanvasRenderingContext2D) {
@@ -173,7 +156,7 @@ export class Pet {
 
     // Rich tool detail
     let line2: string;
-    const { tool, toolDetail } = this.session;
+    const { tool, toolDetail, project } = this.session;
     if (tool && toolDetail) {
       line2 = `${tool}: ${toolDetail}`;
     } else if (tool) {
@@ -182,7 +165,7 @@ export class Pet {
       line2 = this.session.status;
     }
 
-    const line3 = elapsed;
+    const line3 = project ? `${project} · ${elapsed}` : elapsed;
 
     ctx.save();
     ctx.font = '11px monospace';

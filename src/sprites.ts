@@ -28,13 +28,14 @@ function rect(ctx: OffscreenCanvasRenderingContext2D, x: number, y: number, w: n
 
 function drawBody(ctx: OffscreenCanvasRenderingContext2D, yOffset = 0, body = DEFAULT_BODY, light = DEFAULT_LIGHT) {
   const y = 8 + yOffset;
-  rect(ctx, 12, y, 8, 8, body);
-  rect(ctx, 11, y + 1, 10, 6, body);
-  rect(ctx, 10, y + 2, 12, 4, body);
-  rect(ctx, 12, y + 1, 4, 2, light);
-  rect(ctx, 11, y + 8, 10, 8, body);
-  rect(ctx, 10, y + 9, 12, 6, body);
-  rect(ctx, 11, y + 9, 3, 3, light);
+  // Head
+  rect(ctx, 13, y, 6, 8, body);
+  rect(ctx, 12, y + 1, 8, 6, body);
+  rect(ctx, 13, y + 1, 3, 2, light);
+  // Body
+  rect(ctx, 13, y + 8, 6, 8, body);
+  rect(ctx, 12, y + 9, 8, 6, body);
+  rect(ctx, 13, y + 9, 2, 3, light);
 }
 
 function drawEyes(ctx: OffscreenCanvasRenderingContext2D, yOffset = 0, blink = false) {
@@ -54,25 +55,20 @@ function drawLegs(ctx: OffscreenCanvasRenderingContext2D, yOffset: number, frame
   const y = 8 + yOffset;
   const legY = y + 16;
   if (frame % 2 === 0) {
-    rect(ctx, 12, legY, 3, 2, body);
-    rect(ctx, 18, legY + 1, 3, 2, body);
+    rect(ctx, 13, legY, 2, 2, body);
+    rect(ctx, 17, legY + 1, 2, 2, body);
   } else {
-    rect(ctx, 12, legY + 1, 3, 2, body);
-    rect(ctx, 18, legY, 3, 2, body);
+    rect(ctx, 13, legY + 1, 2, 2, body);
+    rect(ctx, 17, legY, 2, 2, body);
   }
 }
 
 function drawArms(ctx: OffscreenCanvasRenderingContext2D, yOffset = 0, body = DEFAULT_BODY) {
   const y = 8 + yOffset;
-  rect(ctx, 8, y + 10, 2, 4, body);
-  rect(ctx, 22, y + 10, 2, 4, body);
+  rect(ctx, 10, y + 10, 2, 4, body);
+  rect(ctx, 20, y + 10, 2, 4, body);
 }
 
-// Model badge — small colored dot on the body
-function drawModelBadge(ctx: OffscreenCanvasRenderingContext2D, accent: string, yOffset = 0) {
-  const y = 8 + yOffset;
-  rect(ctx, 19, y + 9, 2, 2, accent);
-}
 
 function generateIdleFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?: string): SpriteSet {
   const frames: SpriteFrame[] = [];
@@ -84,7 +80,6 @@ function generateIdleFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?:
       drawEyes(ctx, bob, blink);
       drawArms(ctx, bob, body);
       drawLegs(ctx, bob, i < 4 ? i : 0, body);
-      if (accent) drawModelBadge(ctx, accent, bob);
     }));
   }
   return { frames, fps: 8 };
@@ -97,14 +92,15 @@ function generateThinkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, acce
     frames.push(createFrame((ctx) => {
       drawBody(ctx, 0, body, light);
       drawLegs(ctx, 0, 0, body);
-      if (accent) drawModelBadge(ctx, accent);
-      rect(ctx, 8, 18, 2, 4, body);
-      const armY = [6, 5, 7][scratchPhase];
-      rect(ctx, 22, 10, 2, armY, body);
-      rect(ctx, 21, 9, 3, 2, body);
+      // Left arm resting
+      rect(ctx, 10, 18, 2, 4, body);
+      // Right arm reaching up to scratch head
+      const handY = [8, 7, 9][scratchPhase];
+      rect(ctx, 20, 12, 2, handY - 2, body); // forearm
+      rect(ctx, 19, handY, 2, 2, body); // hand on head
       if (scratchPhase === 1) {
-        px(ctx, 20, 8, '#FFFFFF');
-        px(ctx, 24, 7, '#FFFFFF');
+        px(ctx, 18, 7, '#FFFFFF');
+        px(ctx, 22, 6, '#FFFFFF');
       }
       const blink = i === 4;
       if (blink) {
@@ -129,19 +125,19 @@ function generateThinkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, acce
 
 function generateWorkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?: string): SpriteSet {
   const frames: SpriteFrame[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
+    const blink = i === 4;
     frames.push(createFrame((ctx) => {
       drawBody(ctx, 2, body, light);
-      drawEyes(ctx, 2, false);
-      if (accent) drawModelBadge(ctx, accent, 2);
-      rect(ctx, 9, 24, 14, 2, LAPTOP_COLOR);
-      rect(ctx, 10, 22, 12, 2, '#6AB0FF');
-      rect(ctx, 11, 22, 10, 1, '#AADDFF');
-      const armOffset = i % 2 === 0 ? 0 : 1;
-      rect(ctx, 10, 20 + armOffset, 3, 3, body);
-      rect(ctx, 19, 21 - armOffset, 3, 3, body);
-      rect(ctx, 12, 27, 3, 2, body);
-      rect(ctx, 17, 27, 3, 2, body);
+      drawEyes(ctx, 2, blink);
+      rect(ctx, 10, 24, 12, 2, LAPTOP_COLOR);
+      rect(ctx, 11, 22, 10, 2, '#6AB0FF');
+      rect(ctx, 12, 22, 8, 1, '#AADDFF');
+      const typing = i % 2 === 0 ? 0 : 1;
+      rect(ctx, 12, 20 + typing, 2, 3, body);
+      rect(ctx, 18, 21 - typing, 2, 3, body);
+      rect(ctx, 13, 27, 2, 2, body);
+      rect(ctx, 17, 27, 2, 2, body);
     }));
   }
   return { frames, fps: 6 };
@@ -154,12 +150,11 @@ function generateDoneFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?:
     frames.push(createFrame((ctx) => {
       drawBody(ctx, jumpHeight, body, light);
       drawEyes(ctx, jumpHeight, false);
-      if (accent) drawModelBadge(ctx, accent, jumpHeight);
       const y = 8 + jumpHeight;
-      rect(ctx, 7, y + 6, 3, 2, body);
-      rect(ctx, 22, y + 6, 3, 2, body);
-      rect(ctx, 6, y + 4, 2, 3, body);
-      rect(ctx, 24, y + 4, 2, 3, body);
+      rect(ctx, 9, y + 6, 3, 2, body);
+      rect(ctx, 20, y + 6, 3, 2, body);
+      rect(ctx, 8, y + 4, 2, 3, body);
+      rect(ctx, 22, y + 4, 2, 3, body);
       drawLegs(ctx, jumpHeight, i, body);
       if (i === 1 || i === 2) {
         px(ctx, 6, 6 + jumpHeight, SPARKLE_COLOR);
@@ -211,17 +206,17 @@ function generateAttentionFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT): Sp
       drawBody(ctx, bounce, body, light);
       drawEyes(ctx, bounce, false);
       drawLegs(ctx, bounce, 0, body);
-      // Left arm waving
       const y = 8 + bounce;
-      rect(ctx, 8, y + 10, 2, 4, body); // right arm normal
-      // Left arm up + wave
+      // Left arm resting
+      rect(ctx, 10, y + 10, 2, 4, body);
+      // Right arm waving
       const waveY = [4, 3, 5][wavePhase];
-      rect(ctx, 22, y + waveY, 2, 5, body);
-      rect(ctx, 24, y + waveY - 1, 2, 2, body); // hand
+      rect(ctx, 20, y + waveY, 2, 5, body);
+      rect(ctx, 21, y + waveY - 1, 2, 2, body);
       // Exclamation mark
       if (i < 4) {
-        rect(ctx, 27, 3 + bounce, 1, 4, '#FF6B6B');
-        px(ctx, 27, 8 + bounce, '#FF6B6B');
+        rect(ctx, 25, 3 + bounce, 1, 4, '#FF6B6B');
+        px(ctx, 25, 8 + bounce, '#FF6B6B');
       }
     }));
   }
