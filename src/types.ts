@@ -55,7 +55,7 @@ export interface ModelTheme {
 }
 
 export const MODEL_THEMES: Record<ModelFamily, ModelTheme> = {
-  opus: { body: '#C4843C', bodyLight: '#D9A050', accent: '#FFD700', scale: 2 },
+  opus: { body: '#C45A3C', bodyLight: '#D9734F', accent: '#FFD700', scale: 2 },
   sonnet: { body: '#D97757', bodyLight: '#E8956A', accent: '#4A90D9', scale: 2 },
   haiku: { body: '#5BAD7A', bodyLight: '#7DC99A', accent: '#A8E6CF', scale: 2 },
   unknown: { body: '#D97757', bodyLight: '#E8956A', accent: '#4A90D9', scale: 2 },
