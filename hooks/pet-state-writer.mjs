@@ -2,23 +2,21 @@
 
 /**
  * Claude Code hook — writes session state to ~/.claude/pet-state.json
- *
- * Registered for: SessionStart, PreToolUse, PostToolUse, Stop
- * Reads hook context from stdin as JSON.
+ * Captures: status, tool, file/command detail, model, project, subagents, notifications
  */
 
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { tmpdir, homedir } from 'os';
 
 const STATE_PATH = join(homedir(), '.claude', 'pet-state.json');
-const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+const STALE_THRESHOLD_MS = 30 * 60 * 1000;
 
 function readState() {
   try {
     return JSON.parse(readFileSync(STATE_PATH, 'utf-8'));
   } catch {
-    return { sessions: [] };
+    return { sessions: [], subagents: [] };
   }
 }
 
@@ -29,9 +27,38 @@ function writeState(state) {
   renameSync(tmp, STATE_PATH);
 }
 
-function cleanStale(sessions) {
+function cleanStale(items) {
   const now = Date.now();
-  return sessions.filter((s) => now - s.since * 1000 < STALE_THRESHOLD_MS);
+  return items.filter((s) => now - s.since * 1000 < STALE_THRESHOLD_MS);
+}
+
+function parseModel(modelStr) {
+  if (!modelStr) return undefined;
+  const m = modelStr.toLowerCase();
+  if (m.includes('opus')) return 'opus';
+  if (m.includes('haiku')) return 'haiku';
+  if (m.includes('sonnet')) return 'sonnet';
+  return 'unknown';
+}
+
+function extractToolDetail(hookData) {
+  const input = hookData.tool_input;
+  if (!input) return undefined;
+
+  // File operations
+  if (input.file_path) return basename(input.file_path);
+  // Bash — prefer description, fallback to truncated command
+  if (input.description) return input.description;
+  if (input.command) {
+    const cmd = input.command.length > 40 ? input.command.slice(0, 37) + '...' : input.command;
+    return cmd;
+  }
+  // Search operations
+  if (input.pattern) return input.pattern;
+  if (input.query) return input.query;
+  // Agent
+  if (input.description) return input.description;
+  return undefined;
 }
 
 // Read hook input from stdin
@@ -53,40 +80,80 @@ const sessionId = hookData.session_id;
 if (!sessionId) process.exit(0);
 
 const hookEvent = hookData.hook_event_name || '';
-const toolName = hookData.tool_name || hookData.tool?.name || '';
+const toolName = hookData.tool_name || '';
+const cwd = hookData.cwd || '';
 
 const state = readState();
+if (!state.subagents) state.subagents = [];
 const now = Math.floor(Date.now() / 1000);
 
-// Clean stale sessions
+// Clean stale
 state.sessions = cleanStale(state.sessions);
+state.subagents = cleanStale(state.subagents);
 
-// Find or create session entry
+// -- Subagent events --
+if (hookEvent === 'SubagentStart') {
+  const agentId = hookData.agent_id;
+  if (agentId) {
+    state.subagents.push({
+      id: agentId,
+      parentId: sessionId,
+      type: hookData.agent_type || 'agent',
+      status: 'tool_use',
+      since: now,
+    });
+  }
+  writeState(state);
+  process.exit(0);
+}
+
+if (hookEvent === 'SubagentStop') {
+  const agentId = hookData.agent_id;
+  if (agentId) {
+    state.subagents = state.subagents.filter((s) => s.id !== agentId);
+  }
+  writeState(state);
+  process.exit(0);
+}
+
+// -- Notification events --
+if (hookEvent === 'Notification') {
+  const notifType = hookData.notification_type || '';
+  if (notifType === 'permission_prompt') {
+    const idx = state.sessions.findIndex((s) => s.id === sessionId);
+    if (idx !== -1) {
+      state.sessions[idx].needsAttention = true;
+    }
+  }
+  writeState(state);
+  process.exit(0);
+}
+
+// -- Session events --
 const idx = state.sessions.findIndex((s) => s.id === sessionId);
 
 if (hookEvent === 'Stop' || hookEvent === 'stop') {
-  // Remove session on stop
-  if (idx !== -1) {
-    state.sessions.splice(idx, 1);
-  }
+  if (idx !== -1) state.sessions.splice(idx, 1);
+  state.subagents = state.subagents.filter((s) => s.parentId !== sessionId);
 } else {
   let status = 'idle';
+  if (hookEvent === 'PreToolUse') status = 'tool_use';
+  else if (hookEvent === 'PostToolUse') status = 'thinking';
+  else if (hookEvent === 'UserPromptSubmit') status = 'thinking';
+  else if (hookEvent === 'SessionStart') status = 'idle';
 
-  if (hookEvent === 'PreToolUse') {
-    status = 'tool_use';
-  } else if (hookEvent === 'PostToolUse') {
-    // Stay in 'thinking' between tool calls — Claude is still active
-    status = 'thinking';
-  } else if (hookEvent === 'UserPromptSubmit') {
-    status = 'thinking';
-  } else if (hookEvent === 'SessionStart') {
-    status = 'idle';
-  }
+  // Preserve model from SessionStart, update on new SessionStart
+  const existingModel = idx !== -1 ? state.sessions[idx].model : undefined;
+  const model = hookEvent === 'SessionStart' ? parseModel(hookData.model) : existingModel;
 
   const session = {
     id: sessionId,
     status,
     tool: toolName || undefined,
+    toolDetail: extractToolDetail(hookData),
+    model: model || undefined,
+    project: cwd ? basename(cwd) : undefined,
+    needsAttention: false,
     since: now,
   };
 

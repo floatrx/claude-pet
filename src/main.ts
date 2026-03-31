@@ -1,21 +1,19 @@
 import { listen } from '@tauri-apps/api/event';
 import { cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
-import { generateSpriteSheet } from './sprites';
-import { Pet, RENDER_SIZE } from './pet';
-import { onSessionsChange, updateState } from './state';
-import type { PetState, Session } from './types';
+import { Pet } from './pet';
+import { onStateChange, updateState } from './state';
+import type { PetState, Session, Subagent } from './types';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const appWindow = getCurrentWindow();
 
 // -- Layout --
-const SPRITE_BOTTOM_PAD = -10; // fine-tune: push pets higher above dock
-let dockHeight = 70; // updated from Rust
+const SPRITE_BOTTOM_PAD = -10;
+let dockHeight = 70;
 
-// Default pet Y: walk just above the dock
-function defaultPetY() {
-  return window.innerHeight - RENDER_SIZE - dockHeight + SPRITE_BOTTOM_PAD;
+function defaultPetY(petSize: number) {
+  return window.innerHeight - petSize - dockHeight + SPRITE_BOTTOM_PAD;
 }
 
 function resize() {
@@ -30,13 +28,11 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// Receive dock dimensions from Rust
 listen<{ height: number }>('dock-info', (event) => {
   dockHeight = event.payload.height;
 });
 
-// -- Sprite & pet management --
-const sprites = generateSpriteSheet();
+// -- Pet management --
 const pets = new Map<string, Pet>();
 
 function ensureDefaultPet() {
@@ -46,22 +42,26 @@ function ensureDefaultPet() {
       status: 'idle',
       since: Math.floor(Date.now() / 1000),
     };
-    pets.set('default', new Pet(sprites, window.innerWidth, defaultSession));
+    pets.set('default', new Pet(window.innerWidth, defaultSession));
   }
 }
 
 ensureDefaultPet();
 
-// -- Session sync --
-onSessionsChange((sessions) => {
+// -- State sync --
+onStateChange((sessions, subagents) => {
   const activeIds = new Set(sessions.map((s) => s.id));
-  for (const [id] of pets) {
+  const activeSubIds = new Set(subagents.map((s) => s.id));
+
+  // Remove dead pets
+  for (const [id, pet] of pets) {
     if (id === 'default') continue;
-    if (!activeIds.has(id)) {
+    if (pet.isSubagent ? !activeSubIds.has(id) : !activeIds.has(id)) {
       pets.delete(id);
     }
   }
 
+  // Update or create session pets
   for (const session of sessions) {
     const existing = pets.get(session.id);
     if (existing) {
@@ -70,13 +70,30 @@ onSessionsChange((sessions) => {
       if (pets.has('default') && session.id !== 'default') {
         pets.delete('default');
       }
-      const spacing = RENDER_SIZE * 1.5;
-      const startX = (pets.size * spacing) % (window.innerWidth - RENDER_SIZE);
-      pets.set(session.id, new Pet(sprites, window.innerWidth, session, startX));
+      const spacing = 100;
+      const startX = (pets.size * spacing) % (window.innerWidth - 64);
+      pets.set(session.id, new Pet(window.innerWidth, session, startX));
     }
   }
 
-  if (sessions.length === 0) {
+  // Spawn subagent mini-pets near their parent
+  for (const sub of subagents) {
+    if (pets.has(sub.id)) continue;
+    const parent = pets.get(sub.parentId);
+    const subSession: Session = {
+      id: sub.id,
+      status: sub.status,
+      tool: sub.type,
+      model: 'haiku', // subagents get smallest skin
+      since: sub.since,
+    };
+    const startX = parent ? parent.x + parent.renderSize + 10 : Math.random() * window.innerWidth;
+    const pet = new Pet(window.innerWidth, subSession, startX);
+    pet.isSubagent = true;
+    pets.set(sub.id, pet);
+  }
+
+  if (sessions.length === 0 && subagents.length === 0) {
     ensureDefaultPet();
   }
 });
@@ -85,11 +102,10 @@ listen<PetState>('pet-state-changed', (event) => {
   updateState(event.payload);
 });
 
-// -- Cursor tracking (works even with click-through) --
+// -- Cursor tracking --
 let cursorX = -1;
 let cursorY = -1;
 let hoveredPet: Pet | null = null;
-
 let draggedPet: Pet | null = null;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
@@ -112,7 +128,6 @@ async function trackCursor() {
       }
     }
 
-    // Update cursor style
     canvas.style.cursor = draggedPet ? 'grabbing' : hoveredPet ? 'grab' : 'default';
 
     const shouldBeClickThrough = !hoveredPet && !draggedPet;
@@ -121,11 +136,11 @@ async function trackCursor() {
       await appWindow.setIgnoreCursorEvents(shouldBeClickThrough);
     }
   } catch {
-    // Ignore cursor tracking errors
+    // Ignore
   }
 }
 
-// -- Drag and drop (now supports Y axis too) --
+// -- Drag and drop --
 canvas.addEventListener('mousedown', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
@@ -148,8 +163,8 @@ canvas.addEventListener('mousemove', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
-  draggedPet.x = Math.max(0, Math.min(mx - dragOffsetX, window.innerWidth - RENDER_SIZE));
-  draggedPet.y = Math.max(0, Math.min(my - dragOffsetY, window.innerHeight - RENDER_SIZE));
+  draggedPet.x = Math.max(0, Math.min(mx - dragOffsetX, window.innerWidth - draggedPet.renderSize));
+  draggedPet.y = Math.max(0, Math.min(my - dragOffsetY, window.innerHeight - draggedPet.renderSize));
 });
 
 canvas.addEventListener('mouseup', () => {
@@ -167,7 +182,7 @@ canvas.addEventListener('dblclick', (e) => {
   for (const pet of pets.values()) {
     if (pet.hitTest(mx, my)) {
       pet.hasCustomY = false;
-      pet.x = Math.random() * (window.innerWidth - RENDER_SIZE);
+      pet.x = Math.random() * (window.innerWidth - pet.renderSize);
       break;
     }
   }
@@ -183,13 +198,11 @@ function loop(time: number) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const width = window.innerWidth;
-  const petDefaultY = defaultPetY();
 
   for (const pet of pets.values()) {
     pet.setCanvasWidth(width);
-    // Set default Y for new pets that haven't been dragged
     if (!pet.hasCustomY) {
-      pet.y = petDefaultY;
+      pet.y = defaultPetY(pet.renderSize);
     }
     pet.update(dt);
     pet.draw(ctx);

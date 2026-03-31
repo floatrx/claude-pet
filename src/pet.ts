@@ -1,13 +1,17 @@
-import type { AnimationState, Session, SpriteSheet } from './types';
-import { SPRITE_SIZE } from './sprites';
+import type { AnimationState, ModelFamily, Session, SpriteSheet } from './types';
+import { MODEL_THEMES } from './types';
+import { generateSpriteSheet, SPRITE_SIZE } from './sprites';
 import { petName } from './names';
 
-const SCALE = 2;
-const RENDER_SIZE = SPRITE_SIZE * SCALE;
-const WALK_SPEED = 30; // pixels per second
+const WALK_SPEED = 30;
 
-function statusToAnimation(status: Session['status']): AnimationState {
-  switch (status) {
+function scaleForModel(model?: ModelFamily): number {
+  return model ? MODEL_THEMES[model].scale : MODEL_THEMES.sonnet.scale;
+}
+
+function statusToAnimation(session: Session): AnimationState {
+  if (session.needsAttention) return 'attention';
+  switch (session.status) {
     case 'thinking':
       return 'thinking';
     case 'streaming':
@@ -31,30 +35,46 @@ function formatElapsed(since: number): string {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+// Cache sprite sheets per model to avoid regenerating
+const spriteCache = new Map<string, SpriteSheet>();
+
+function getSprites(model?: ModelFamily): SpriteSheet {
+  const key = model || 'sonnet';
+  let sprites = spriteCache.get(key);
+  if (!sprites) {
+    sprites = generateSpriteSheet(model);
+    spriteCache.set(key, sprites);
+  }
+  return sprites;
+}
+
 export class Pet {
   x: number;
   y: number;
   hasCustomY = false;
   session: Session;
+  isSubagent = false;
   private direction: 1 | -1 = 1;
   private animState: AnimationState = 'idle';
   private frameIndex = 0;
   private frameTimer = 0;
   private sprites: SpriteSheet;
   private canvasWidth: number;
+  private scale: number;
   dragging = false;
 
-  constructor(sprites: SpriteSheet, canvasWidth: number, session: Session, startX?: number) {
-    this.sprites = sprites;
+  constructor(canvasWidth: number, session: Session, startX?: number) {
+    this.scale = scaleForModel(session.model);
+    this.sprites = getSprites(session.model);
     this.canvasWidth = canvasWidth;
     this.session = session;
-    this.x = startX ?? Math.random() * (canvasWidth - RENDER_SIZE);
-    this.y = 0; // set by main loop via defaultPetY()
-    this.animState = statusToAnimation(session.status);
+    this.x = startX ?? Math.random() * (canvasWidth - this.renderSize);
+    this.y = 0;
+    this.animState = statusToAnimation(session);
   }
 
   get renderSize() {
-    return RENDER_SIZE;
+    return SPRITE_SIZE * this.scale;
   }
 
   setCanvasWidth(width: number) {
@@ -62,8 +82,13 @@ export class Pet {
   }
 
   updateSession(session: Session) {
+    // Update sprites if model changed
+    if (session.model !== this.session.model) {
+      this.scale = scaleForModel(session.model);
+      this.sprites = getSprites(session.model);
+    }
     this.session = session;
-    const newAnim = statusToAnimation(session.status);
+    const newAnim = statusToAnimation(session);
     if (this.animState !== newAnim) {
       this.animState = newAnim;
       this.frameIndex = 0;
@@ -72,7 +97,8 @@ export class Pet {
   }
 
   hitTest(px: number, py: number): boolean {
-    return px >= this.x && px <= this.x + RENDER_SIZE && py >= this.y && py <= this.y + RENDER_SIZE;
+    const size = this.renderSize;
+    return px >= this.x && px <= this.x + size && py >= this.y && py <= this.y + size;
   }
 
   update(dt: number) {
@@ -87,12 +113,11 @@ export class Pet {
       this.frameIndex = (this.frameIndex + 1) % spriteSet.frames.length;
     }
 
-    // Move only when idle (walking horizontally)
     if (this.animState === 'idle') {
       this.x += WALK_SPEED * this.direction * dt;
-
-      if (this.x + RENDER_SIZE > this.canvasWidth) {
-        this.x = this.canvasWidth - RENDER_SIZE;
+      const size = this.renderSize;
+      if (this.x + size > this.canvasWidth) {
+        this.x = this.canvasWidth - size;
         this.direction = -1;
       } else if (this.x < 0) {
         this.x = 0;
@@ -104,29 +129,59 @@ export class Pet {
   draw(ctx: CanvasRenderingContext2D) {
     const spriteSet = this.sprites[this.animState];
     const frame = spriteSet.frames[this.frameIndex];
+    const size = this.renderSize;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
     if (this.direction === -1) {
-      ctx.translate(this.x + RENDER_SIZE, this.y);
+      ctx.translate(this.x + size, this.y);
       ctx.scale(-1, 1);
-      ctx.drawImage(frame.canvas, 0, 0, RENDER_SIZE, RENDER_SIZE);
+      ctx.drawImage(frame.canvas, 0, 0, size, size);
     } else {
-      ctx.drawImage(frame.canvas, this.x, this.y, RENDER_SIZE, RENDER_SIZE);
+      ctx.drawImage(frame.canvas, this.x, this.y, size, size);
     }
 
+    ctx.restore();
+
+    // Project name label above pet
+    if (this.session.project) {
+      this.drawLabel(ctx, this.session.project);
+    }
+  }
+
+  private drawLabel(ctx: CanvasRenderingContext2D, text: string) {
+    const size = this.renderSize;
+    const centerX = this.x + size / 2;
+
+    ctx.save();
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillText(text, centerX, this.y - 4);
     ctx.restore();
   }
 
   drawTooltip(ctx: CanvasRenderingContext2D) {
-    const centerX = this.x + RENDER_SIZE / 2;
-    const status = this.session.status;
-    const tool = this.session.tool;
+    const size = this.renderSize;
+    const centerX = this.x + size / 2;
     const elapsed = formatElapsed(this.session.since);
 
-    const line1 = petName(this.session.id);
-    const line2 = tool ? `${status} (${tool})` : status;
+    const name = petName(this.session.id);
+    const modelTag = this.session.model ? ` [${this.session.model}]` : '';
+    const line1 = `${name}${modelTag}`;
+
+    // Rich tool detail
+    let line2: string;
+    const { tool, toolDetail } = this.session;
+    if (tool && toolDetail) {
+      line2 = `${tool}: ${toolDetail}`;
+    } else if (tool) {
+      line2 = `${this.session.status} (${tool})`;
+    } else {
+      line2 = this.session.status;
+    }
+
     const line3 = elapsed;
 
     ctx.save();
@@ -151,8 +206,11 @@ export class Pet {
     ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4);
     ctx.fill();
 
-    // Border
-    ctx.strokeStyle = 'rgba(217, 119, 87, 0.6)';
+    // Border — accent color based on model
+    const accent = this.session.model
+      ? MODEL_THEMES[this.session.model].accent
+      : 'rgba(217, 119, 87, 0.6)';
+    ctx.strokeStyle = accent;
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -165,7 +223,7 @@ export class Pet {
     ctx.fill();
 
     // Text
-    ctx.fillStyle = '#D97757';
+    ctx.fillStyle = accent;
     ctx.fillText(line1, boxX + padding, boxY + padding + 10);
     ctx.fillStyle = '#E0E0E0';
     ctx.fillText(line2, boxX + padding, boxY + padding + 10 + lineHeight);
@@ -175,5 +233,3 @@ export class Pet {
     ctx.restore();
   }
 }
-
-export { RENDER_SIZE };
