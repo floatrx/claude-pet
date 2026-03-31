@@ -1,6 +1,16 @@
 node_modules/
 dist/
 tsconfig.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+
+# Build artifacts
+*.dmg
+*.app
+
+# Local workspace
 .work/
 CLAUDE.md
 .claude/
