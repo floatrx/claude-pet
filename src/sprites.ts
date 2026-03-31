@@ -70,7 +70,7 @@ function drawArms(ctx: OffscreenCanvasRenderingContext2D, yOffset = 0, body = DE
 }
 
 
-function generateIdleFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?: string): SpriteSet {
+function generateIdleFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT): SpriteSet {
   const frames: SpriteFrame[] = [];
   for (let i = 0; i < 6; i++) {
     const blink = i >= 4;
@@ -85,7 +85,7 @@ function generateIdleFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?:
   return { frames, fps: 8 };
 }
 
-function generateThinkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?: string): SpriteSet {
+function generateThinkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT): SpriteSet {
   const frames: SpriteFrame[] = [];
   for (let i = 0; i < 6; i++) {
     const scratchPhase = i % 3;
@@ -123,7 +123,7 @@ function generateThinkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, acce
   return { frames, fps: 4 };
 }
 
-function generateWorkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?: string): SpriteSet {
+function generateWorkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT): SpriteSet {
   const frames: SpriteFrame[] = [];
   for (let i = 0; i < 6; i++) {
     const blink = i === 4;
@@ -143,7 +143,7 @@ function generateWorkingFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accen
   return { frames, fps: 6 };
 }
 
-function generateDoneFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT, accent?: string): SpriteSet {
+function generateDoneFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT): SpriteSet {
   const frames: SpriteFrame[] = [];
   for (let i = 0; i < 4; i++) {
     const jumpHeight = [0, -4, -6, -3][i];
@@ -225,13 +225,13 @@ function generateAttentionFrames(body = DEFAULT_BODY, light = DEFAULT_LIGHT): Sp
 
 export function generateSpriteSheet(model?: ModelFamily): SpriteSheet {
   const theme: ModelTheme = model ? MODEL_THEMES[model] : MODEL_THEMES.sonnet;
-  const { body, bodyLight, accent } = theme;
+  const { body, bodyLight } = theme;
 
   return {
-    idle: generateIdleFrames(body, bodyLight, accent),
-    thinking: generateThinkingFrames(body, bodyLight, accent),
-    working: generateWorkingFrames(body, bodyLight, accent),
-    done: generateDoneFrames(body, bodyLight, accent),
+    idle: generateIdleFrames(body, bodyLight),
+    thinking: generateThinkingFrames(body, bodyLight),
+    working: generateWorkingFrames(body, bodyLight),
+    done: generateDoneFrames(body, bodyLight),
     error: generateErrorFrames(body, bodyLight),
     attention: generateAttentionFrames(body, bodyLight),
   };

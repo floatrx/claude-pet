@@ -2,7 +2,7 @@ import { listen } from '@tauri-apps/api/event';
 import { cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import { Pet } from './pet';
 import { onStateChange, updateState } from './state';
-import type { PetState, Session, Subagent } from './types';
+import type { PetState, Session } from './types';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
