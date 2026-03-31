@@ -156,50 +156,59 @@ Sessions and subagents older than 30 minutes are automatically cleaned up.
 ### Development
 
 ```bash
-pnpm tauri dev
+pnpm dev
 ```
 
 Starts Vite dev server on `localhost:1420` and launches the Tauri window. Hot-reload is active for frontend changes; Rust changes trigger a rebuild.
 
-### Production build
+### Build & Install DMG
 
-```bash
-pnpm tauri build
-```
+#### Prerequisites
 
-Outputs platform-specific installers to `src-tauri/target/release/bundle/`:
-
-| Platform | Output | Location |
-|---|---|---|
-| macOS | `.dmg` + `.app` | `bundle/dmg/claude-pet_0.1.0_aarch64.dmg` |
-| macOS | Standalone `.app` | `bundle/macos/claude-pet.app` |
-
-#### Build requirements
-
-- **Rust** stable toolchain (install via [rustup.rs](https://rustup.rs))
+- **Rust** stable toolchain — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 - **Xcode Command Line Tools** — `xcode-select --install`
 - **Node.js** 20+ and **pnpm** — `npm i -g pnpm`
 
-#### Step-by-step
+#### Build
 
 ```bash
-# 1. Install frontend dependencies
+# Install dependencies
 pnpm install
 
-# 2. Build the app (compiles Rust + bundles frontend)
-pnpm tauri build
+# Build release DMG (compiles Rust + bundles frontend)
+pnpm build:dmg
 
-# 3. Open the DMG to install
+# Open the DMG
 open src-tauri/target/release/bundle/dmg/*.dmg
 ```
 
-The build runs `tsc && vite build` for the frontend, then compiles the Rust backend in release mode. First build is slower due to Cargo dependency compilation.
+First build takes longer (~2 min) due to Cargo dependency compilation. Subsequent builds are ~30s.
 
-#### Installing the built app
+#### Install
 
 1. Open the `.dmg` file
-2. Drag `claude-pet.app` to Applications
+2. Drag **claude-pet.app** to **Applications**
 3. On first launch, macOS may block it — go to **System Settings > Privacy & Security** and click **Open Anyway**
+4. The app appears in the **menu bar** (no dock icon)
+
+#### Output
+
+| Output | Location |
+|---|---|
+| `.app` bundle | `src-tauri/target/release/bundle/macos/claude-pet.app` |
+| `.dmg` installer | `src-tauri/target/release/bundle/dmg/claude-pet_0.1.0_aarch64.dmg` |
+
+### Available Scripts
+
+| Command | Action |
+|---|---|
+| `pnpm dev` | Dev mode with hot reload |
+| `pnpm build:app` | Production build (.app + .dmg) |
+| `pnpm build:dmg` | Same as build:app |
+| `pnpm build:debug` | Debug build |
+| `pnpm icons` | Regenerate app icons |
+| `pnpm icons:tray` | Regenerate menu bar icon |
+| `pnpm typecheck` | Run TypeScript checks |
 
 ### Type checking
 
