@@ -82,7 +82,8 @@ pub fn run() {
                 .item(&quit)
                 .build()?;
 
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id("claude-pet-tray")
+                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))?)
                 .menu(&menu)
                 .tooltip("Claude Pet")
                 .on_menu_event(move |app, event| {
@@ -106,7 +107,12 @@ pub fn run() {
                         _ => {}
                     }
                 })
-                .build(app)?;
+                .build(app)
+                .expect("Failed to build tray icon");
+
+            // Hide from dock AFTER tray is set up
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // -- File Watcher --
             let app_handle = app.handle().clone();

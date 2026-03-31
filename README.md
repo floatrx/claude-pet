@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src-tauri/icons/Square310x310Logo.png" width="128" alt="Claude Pet" />
+</p>
+
 # Claude Pet
 
 Desktop mascot that visualizes active Claude Code sessions as animated pixel-art pets. Each running session spawns a pet that walks, types, celebrates, or shows errors depending on what Claude is doing. Pets are color-coded and sized by model family, get random names, and show rich tooltips with tool details.
